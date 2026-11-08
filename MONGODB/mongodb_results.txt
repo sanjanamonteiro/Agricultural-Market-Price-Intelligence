@@ -1,0 +1,84 @@
+
+MONGODB IMPLEMENTATION AND RESULTS
+Project: Agricultural Market Price Intelligence and Short-Term Crop Price Forecasting Using Big Data Analytics
+
+1. DATABASE DETAILS
+Database: agri_market_intelligence
+Collection: ramanagara_tomato_prices
+Database type: MongoDB Atlas (NoSQL document database)
+Source: BigQuery curated table
+Records transferred: 160
+Unique dates: 160
+Date range: 01-01-2025 to 02-07-2025
+
+2. INDEXING
+Index created: Arrival_Date_1
+Index type: Ascending index
+Purpose: Improve date-based filtering and retrieval.
+
+3. MONGODB QUERIES
+
+Query 1: Indexed date-range search
+Business question: Retrieve tomato prices for January 2025.
+Result: 29 records found.
+Keys examined: 29
+Documents examined: 29
+
+Query 2: Price statistics
+Business question: What are the average, minimum and maximum modal prices?
+Average price: Rs. 1210.625
+Minimum price: Rs. 500
+Maximum price: Rs. 2600
+Total records: 160
+
+Query 3: Grade-wise price analysis
+Business question: What is the average price for each grade?
+Result: FAQ grade
+Average price: Rs. 1210.625
+Record count: 160
+
+Query 4: High-price alert
+Business question: Which records have modal prices above Rs. 2000?
+Result: 6 records found.
+
+Query 5: Monthly price analysis
+Business question: How do tomato prices vary month by month?
+Result: 7 months analysed (January to July 2025).
+
+4. INDEX PERFORMANCE COMPARISON
+
+Search condition: January 2025 records
+
+Metric                  Indexed Search    Collection Scan
+Records found           29                29
+Execution time          169.0366 ms       129.6801 ms
+Keys examined           29                0
+Documents examined      29                160
+
+Observation:
+The indexed search examined only 29 documents, whereas
+the collection scan examined all 160 documents.
+The collection scan was faster in this test because the
+collection contains a relatively small number of records.
+Indexing reduced the number of documents examined but
+did not reduce the measured execution time in this run.
+
+5. WHY MONGODB WAS SELECTED
+
+MongoDB is a NoSQL document database that stores data
+in flexible JSON-like documents.
+
+It was selected because:
+- It supports flexible data structures.
+- It handles semi-structured agricultural market data.
+- It supports fast document retrieval and filtering.
+- It provides indexing for frequently queried fields.
+- It can support dashboard applications and scalable data storage.
+
+6. CONCLUSION
+
+The curated BigQuery data was transferred to MongoDB Atlas.
+A total of 160 records were verified.
+Five MongoDB queries were executed successfully.
+An indexed date-range query and performance comparison
+were also completed.
