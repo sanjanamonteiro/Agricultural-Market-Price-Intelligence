@@ -158,7 +158,7 @@ The architecture combines historical data processing and simulated real-time str
 4. A curated Ramanagara dataset is created using BigQuery.
 5. Curated records are transferred from BigQuery to MongoDB Atlas.
 6. Python and Windows Task Scheduler automate the ETL process.
-7. Historical market-price records retrieved from Google BigQuery are replayed through a Kafka producer.
+7. Historical CSV records are replayed through a Kafka producer.
 8. Apache Kafka receives the records through the `mandi-prices` topic.
 9. Spark Structured Streaming processes the incoming events.
 10. Streaming output includes raw records, one-minute aggregations, and high-price alerts.
@@ -568,7 +568,7 @@ The timings represent the measured operations in the Python query script. For Qu
 
 ## 11.1 Purpose
 
-Apache Kafka is used to receive agricultural market-price records as messages. The Python producer retrieves records directly from Google BigQuery and sends them to a Kafka topic.
+Apache Kafka is used to receive agricultural market-price records as messages. The Python producer reads records from the historical CSV file and sends them to a Kafka topic.
 
 This simulates an incoming market-price data feed.
 
@@ -579,7 +579,7 @@ This simulates an incoming market-price data feed.
 | Kafka topic | `mandi-prices` |
 | Configured broker | `localhost:9092` |
 | Producer file | `STREAMING/kafka_price_producer.py` |
-| Primary data source | Google BigQuery: `agrimarketanalytics.mandi_price_data.tomato_karnataka_2025` |
+| Replay input | Temporary historical-record input used for the completed Kafka replay; the primary raw dataset is retained in BigQuery, not in the project workspace. |
 | Message format | JSON |
 | Replay delay | 1 second |
 
@@ -587,7 +587,7 @@ This simulates an incoming market-price data feed.
 
 The Kafka producer:
 
-1. Retrieves the dataset directly from Google BigQuery.
+1. Reads the CSV dataset.
 2. Retrieves each row as a dictionary.
 3. Prepares the record for JSON serialization.
 4. Uses the market name as the Kafka message key.
@@ -1262,40 +1262,40 @@ Important project files include:
 
 ```text
 Agricultural_Market_Price_Intelligence/
-|
-|-- DASHBOARD/
-|   `-- app_corrected.py
-|
-|-- DATA/
-|   `-- RAW/
-|       `-- (Raw dataset stored in Google BigQuery)
-|
-|-- DOCS/
-|   |-- Project_Report.md
-|   |-- architecture_diagram.md
-|   `-- Screenshots/
-|
-|-- FORECASTING/
-|   |-- price_forecasting.py
-|   |-- model_evaluation.csv
-|   `-- next_7_days_forecast.csv
-|
-|-- MONGODB/
-|   |-- index_performance.py
-|   |-- mongodb_queries.py
-|   `-- mongodb_results.txt
-|
-|-- SCRIPTS/
-|   `-- bigquery_queries.sql
-|
-|-- STREAMING/
-|   |-- kafka_price_producer.py
-|   `-- spark_kafka_stream.py
-|
-|-- requirements.txt
-|-- run_etl.bat
-|-- transfer_bigquery_to_mongodb.py
-`-- .gitignore
+│
+├── DASHBOARD/
+│   └── app_corrected.py
+│
+├── DATA/
+│   ├── RAW/          (empty; primary data is stored in BigQuery)
+│   └── PROCESSED/    (empty; curated data is stored in BigQuery)
+│
+├── DOCS/
+│   ├── Project_Report.md
+│   ├── architecture_diagram.md
+│   └── Screenshots/
+│
+├── FORECASTING/
+│   ├── price_forecasting.py
+│   ├── model_evaluation.csv
+│   └── next_7_days_forecast.csv
+│
+├── MONGODB/
+│   ├── index_performance.py
+│   ├── mongodb_queries.py
+│   └── mongodb_results.txt
+│
+├── SCRIPTS/
+│   └── bigquery_queries.sql
+│
+├── STREAMING/
+│   ├── kafka_price_producer.py
+│   └── spark_kafka_stream.py
+│
+├── requirements.txt
+├── run_etl.bat
+├── transfer_bigquery_to_mongodb.py
+└── .gitignore
 ```
 
 Private credentials, environment files, virtual environments, and generated checkpoint files are excluded from version control.
@@ -1422,6 +1422,80 @@ The system provides a foundation for understanding historical agricultural price
 8. Streamlit Documentation – https://docs.streamlit.io/
 9. Python Documentation – https://docs.python.org/3/
 10. Scikit-learn Documentation – https://scikit-learn.org/stable/
+
+---
+
+---
+
+# APPENDIX A. SOURCE CODE, QUERY SCRIPTS, AND IMPLEMENTATION EVIDENCE
+
+This appendix provides an index to the implementation files and execution evidence maintained in the public GitHub repository. The detailed BigQuery, MongoDB, and Spark query explanations, business questions, sample results, and measured timings are documented in Sections 10, 12, 13, and 14. The appendix therefore identifies the corresponding source files and evidence rather than duplicating the full query listings.
+
+## A.1 Source-code index
+
+| Project component | Repository file(s) | Purpose |
+|---|---|---|
+| Streamlit dashboard | `DASHBOARD/app_corrected.py` | Displays market-price analysis, records, alerts, and forecast outputs. |
+| BigQuery analytical SQL | `SCRIPTS/bigquery_queries.sql` | Contains the eight analytical SQL queries documented in Section 14. |
+| BigQuery-to-MongoDB ETL | `transfer_bigquery_to_mongodb.py`, `run_etl.bat` | Extracts curated records from BigQuery and transfers them to MongoDB Atlas; the batch file supports execution. |
+| MongoDB analysis | `MONGODB/mongodb_queries.py` | Contains the five MongoDB analytical queries documented in Section 10. |
+| MongoDB performance test | `MONGODB/index_performance.py`, `MONGODB/mongodb_results.txt` | Records the index-versus-collection-scan comparison discussed in Section 13. |
+| Kafka producer | `STREAMING/kafka_price_producer.py` | Publishes replayed market-price records to the `mandi-prices` Kafka topic. |
+| Spark streaming | `STREAMING/spark_kafka_stream.py` | Implements raw record processing, one-minute aggregation, and high-price filtering. |
+| Price forecasting | `FORECASTING/price_forecasting.py` | Trains and evaluates the Random Forest regression model and generates forecast outputs. |
+| Environment setup | `requirements.txt`, `.gitignore` | Lists Python dependencies and excludes local configuration or generated files from version control. |
+
+## A.2 Cloud data warehouse and storage evidence
+
+The primary raw and curated datasets are maintained in Google BigQuery and are not committed as local dataset files in the repository. The cloud warehouse configuration is:
+
+- **Google Cloud project:** `agrimarketanalytics`
+- **BigQuery dataset:** `mandi_price_data`
+- **Raw source table:** `original_mandi_dataset`
+- **Selected analytical table:** `tomato_karnataka_2025`
+- **Curated table:** `ramanagara_tomato_curated`
+
+The project workspace's `DATA/RAW` and `DATA/PROCESSED` folders contain no dataset files, and Git reports no tracked files under `DATA`. The dashboard and ETL/forecasting components use the cloud and database integrations described in this report. Forecast evaluation and forecast-result CSVs are derived outputs, not copies of the primary raw or curated dataset.
+
+## A.3 Query implementation references
+
+| Query group | Number of queries | Source file | Report section |
+|---|---:|---|---|
+| BigQuery analytical SQL | 8 | `SCRIPTS/bigquery_queries.sql` | Section 14 |
+| MongoDB analytical queries | 5 | `MONGODB/mongodb_queries.py` | Section 10 |
+| Spark Structured Streaming queries | 3 | `STREAMING/spark_kafka_stream.py` | Section 12 |
+
+The query scripts in the repository are the implementation references. The report contains the business purpose, query logic, sample observations, and available execution measurements. Where an individual timing was not captured, the report explicitly states that it was not recorded.
+
+## A.4 Screenshots and execution evidence
+
+The `DOCS/Screenshots/` directory contains the following evidence files:
+
+- `bigquery_q1_market_analysis.png`
+- `bigquery_q2_monthly_analysis.png`
+- `bigquery_q3_grade_analysis.png`
+- `bigquery_q4_above_average.png`
+- `bigquery_q5_market_cte.png`
+- `bigquery_q6_market_ranking.png`
+- `bigquery_q7_daily_price_movement.png`
+- `bigquery_q8_high_price_categories.png`
+- `bigquery_saved_queries.png`
+- `bigquery_tables.png`
+- `kafka_sample_records.png`
+- `kafka_topic_verification.png`
+- `spark_streaming_live_alert_verification.png`
+- `spark_streaming_output.png`
+
+These screenshots provide supporting evidence for BigQuery table and query execution, Kafka topic and message verification, and Spark Structured Streaming output. The architecture diagram is maintained separately at `DOCS/architecture_diagram.md`.
+
+## A.5 Repository and reproducibility
+
+**Public source-code repository:** https://github.com/sanjanamonteiro/Agricultural-Market-Price-Intelligence
+
+The repository contains the application code, SQL and NoSQL query scripts, streaming scripts, forecasting implementation, report, architecture documentation, and screenshots. To reproduce cloud-connected components, the user must configure their own Google Cloud authentication and MongoDB Atlas connection details. Passwords, API keys, service-account credentials, `.env` files, and other secrets must not be committed to GitHub.
+
+---
+
 
 ---
 
