@@ -4,6 +4,8 @@ from pyspark.sql.functions import (
     avg, col, count, from_json, to_date, window
 )
 from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.streaming import StreamingQueryListener
+
 
 KAFKA_SERVER = "localhost:9092"
 KAFKA_TOPIC = "mandi-prices"
@@ -15,6 +17,46 @@ PROJECT_ROOT = (
 )
 
 CHECKPOINT_ROOT = PROJECT_ROOT + "/STREAMING/checkpoints_v2"
+
+
+# Spark listener to capture actual micro-batch execution times
+class StreamingTimingListener(StreamingQueryListener):
+
+    def onQueryStarted(self, event):
+        print(
+            "\nSTREAM STARTED:",
+            event.name,
+            "| Query ID:",
+            event.id
+        )
+
+    def onQueryProgress(self, event):
+        progress = event.progress
+        durations = progress.durationMs
+
+        execution_time = durations.get("triggerExecution")
+
+        print("\n========== SPARK QUERY TIMING ==========")
+        print("Query name:", progress.name)
+        print("Batch ID:", progress.batchId)
+        print("Input rows:", progress.numInputRows)
+
+        if execution_time is not None:
+            print(
+                "Actual trigger execution time:",
+                execution_time,
+                "ms"
+            )
+        else:
+            print("Trigger execution duration not available.")
+
+        print("Input rows per second:", progress.inputRowsPerSecond)
+        print("Processed rows per second:", progress.processedRowsPerSecond)
+        print("========================================\n")
+
+    def onQueryTerminated(self, event):
+        print("\nSTREAM TERMINATED:", event.id)
+
 
 schema = StructType([
     StructField("Arrival_Date", StringType(), True),
@@ -29,6 +71,7 @@ schema = StructType([
     StructField("State", StringType(), True),
     StructField("Variety", StringType(), True),
 ])
+
 
 spark = (
     SparkSession.builder
@@ -45,9 +88,15 @@ spark = (
 
 spark.sparkContext.setLogLevel("WARN")
 
+# Register timing listener before starting the queries
+spark.streams.addListener(StreamingTimingListener())
+
 print("Starting Agricultural Market Price Streaming...")
 print("Kafka server:", KAFKA_SERVER)
+print("Kafka topic:", KAFKA_TOPIC)
 print("Shuffle partitions: 4")
+print("Timing measurement: Spark triggerExecution duration")
+
 
 kafka_stream = (
     spark.readStream
@@ -58,6 +107,7 @@ kafka_stream = (
     .option("maxOffsetsPerTrigger", "100")
     .load()
 )
+
 
 parsed_stream = (
     kafka_stream
@@ -81,6 +131,7 @@ parsed_stream = (
     )
 )
 
+
 # Query 1: Structured mandi-price records
 raw_query = (
     parsed_stream.writeStream
@@ -93,6 +144,7 @@ raw_query = (
     .trigger(processingTime="10 seconds")
     .start()
 )
+
 
 # Query 2: One-minute average price by market
 windowed_prices = (
@@ -119,6 +171,7 @@ window_query = (
     .start()
 )
 
+
 # Query 3: High-price alerts
 price_alerts = (
     parsed_stream
@@ -143,9 +196,13 @@ alert_query = (
     .start()
 )
 
-print("All three streaming queries started!")
+
+print("\nAll three streaming queries started!")
 print("1. Structured mandi-price records")
 print("2. One-minute market price aggregation")
 print("3. High-price alerts above Rs.", PRICE_ALERT_THRESHOLD)
+print("\nWaiting for streaming progress and timing measurements...")
+print("Keep this process running while Kafka records are processed.")
+
 
 spark.streams.awaitAnyTermination()
