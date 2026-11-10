@@ -126,14 +126,16 @@ The current dataset is a modest academic-scale dataset. The architecture demonst
 
 ## 5.2 Velocity
 
-- The Kafka producer sends agricultural market-price records to the `mandi-prices` topic.
-- A one-second delay between records simulates an incoming data feed.
-- Spark Structured Streaming continuously reads records from Kafka.
-- The Spark queries use a ten-second processing trigger.
-- A one-minute window is used for market-wise aggregation.
-- High-price records are detected as events arrive.
+The project demonstrates streaming velocity by replaying the public historical AGMARKNET dataset as a simulated incoming event feed. This approach makes the experiment repeatable while allowing the same records to be processed by Kafka and Spark.
 
-The streaming implementation demonstrates simulated data velocity. It does not represent a continuously connected live AGMARKNET feed.
+- The Python producer reads the selected historical market-price records and publishes them to the Kafka topic `mandi-prices`.
+- A one-second delay between published records simulates records arriving over time; it is a demonstration rate, not a measured real-world mandi publication rate.
+- Apache Kafka receives and buffers the events, and Spark Structured Streaming continuously consumes the topic.
+- The Spark queries use a ten-second processing trigger.
+- A one-minute event-time window is used for market-wise aggregation, and a watermark is configured for late-event handling.
+- A separate streaming query filters records whose modal price is greater than ₹2,000 and emits high-price alerts.
+
+**Scope and limitation:** this is a simulated live feed created by replaying historical public data. The project is not connected to a continuously updated AGMARKNET or physical mandi feed. The replay is finite and ends when the source records are exhausted. The Kafka event timestamp represents ingestion time, while `Arrival_Date` is the historical market-arrival date; these fields serve different purposes and should not be interpreted as the same timestamp. The implementation demonstrates the ingestion and processing pattern, but its current local development configuration is not evidence of production-scale throughput or high availability.
 
 ## 5.3 Variety
 
@@ -186,6 +188,27 @@ It contains the Mermaid flowchart showing the AGMARKNET source, Python preparati
 | Git and GitHub | Version control and source-code management |
 | Visual Studio Code | Development environment |
 | Windows Task Scheduler | Automated ETL execution |
+
+## 6.4 Technology selection, design rationale, and trade-offs
+
+The technologies were selected because each addresses a different stage of the agricultural market-price pipeline. The design separates analytical storage, document-oriented retrieval, event ingestion, stream processing, and presentation instead of expecting one tool to perform every task.
+
+| Technology | Why it was selected for this project | Benefits for this use case | Trade-offs and limitations |
+|---|---|---|---|
+| **Google BigQuery** | The project requires cloud-based storage for the raw and curated historical market-price tables and SQL-based analytical queries. | Managed cloud data warehouse; supports SQL aggregation, joins, CTEs, window functions, partitioning, and clustering without managing database servers. | Query processing and storage are subject to service quotas and pricing rules. Data access requires cloud authentication and connectivity. Partitioning and clustering provide less benefit for a small academic dataset than they may for larger tables. |
+| **MongoDB Atlas** | The curated market records are transferred from BigQuery into a NoSQL document database for document-oriented retrieval and application access. | BSON documents map naturally to individual market-price records; flexible documents and indexes support filtered lookups and grouped analysis. | Indexes consume storage and add write-maintenance overhead. Flexible schemas require validation by the application. The current collection is a small curated subset, and its unique date index reflects the current one-record-per-date scope; it is not a general deduplication strategy for multiple markets, grades, or varieties. |
+| **Apache Kafka** | The project needs a message-broker layer between the Python producer and Spark streaming consumers. | Decouples event production from consumption, buffers messages, and provides a topic-based event stream that can be consumed by streaming applications. | A Kafka deployment adds broker, topic, partition, offset, and checkpoint management. The project uses a local demonstration broker with one partition and replication factor one; this does not provide production high availability or demonstrate multi-broker scaling. |
+| **Apache Spark Structured Streaming** | The project needs continuous processing of Kafka events, including raw-record output, time-window aggregation, and high-price event filtering. | Provides a unified DataFrame-based processing model, event-time windows, watermarking, and structured transformations. | Spark has startup, memory, and configuration overhead. The current local execution configuration (`local[2]`) and 673-record replay are suitable for an academic demonstration, not a benchmark of a distributed production cluster. Trigger execution time includes processing and, especially in early batches, startup overhead. |
+| **Python and Windows Task Scheduler** | Python integrates BigQuery and MongoDB for the ETL workflow; Task Scheduler runs the transfer automatically on a schedule. | Reuses the project's Python ecosystem and provides scheduled execution without requiring a separate orchestration platform for this scope. | Scheduling depends on the host machine, its availability, credentials, and network access. A managed orchestrator would be more suitable for monitoring, retries, dependencies, and distributed production workflows. |
+| **Streamlit** | The project needs an interactive interface for exploring the historical dataset, market insights, and forecasting outputs. | Enables a Python-based dashboard with a relatively small development effort. | The current dashboard presents the analytical and forecasting results; it is separate from the Spark console streaming outputs. It should not be described as a live dashboard of the Kafka/Spark stream. |
+
+### Design trade-offs and scope
+
+The project uses BigQuery for historical analytical storage and MongoDB for a curated document-oriented access layer. This introduces a data-transfer step and the need to maintain consistency between the warehouse and the NoSQL collection, but it demonstrates the distinct roles of an analytical warehouse and an application-oriented NoSQL store.
+
+Kafka and Spark are used together because message ingestion and stream computation are separate responsibilities. Kafka transports and buffers events; Spark consumes and analyzes them. This modularity is useful for a streaming architecture, although it introduces more components to configure and operate than a single-process batch script.
+
+The implementation prioritizes a reproducible academic demonstration using public data and accessible tools. Its current record counts, local Kafka/Spark configuration, and single-partition broker do not establish production-scale capacity, fault tolerance, or high availability. A production deployment would require larger and more varied data, multiple Kafka brokers and partitions, replicated infrastructure, monitored cloud-based Spark resources, secure secret management, operational alerting, and load testing. These are identified as scaling requirements rather than claimed as completed features.
 
 # 7. DATA PREPROCESSING AND QUALITY VALIDATION
 
@@ -556,8 +579,7 @@ This simulates an incoming market-price data feed.
 | Kafka topic | `mandi-prices` |
 | Configured broker | `localhost:9092` |
 | Producer file | `STREAMING/kafka_price_producer.py` |
-| Source file | `DATA/RAW/tomato_karnataka_2025.csv` |
-| Message format | JSON |
+| Primary data source | Google BigQuery: `agrimarketanalytics.mandi_price_data.tomato_karnataka_2025` || Message format | JSON |
 | Replay delay | 1 second |
 
 ## 11.3 Producer operation
@@ -1245,7 +1267,7 @@ Agricultural_Market_Price_Intelligence/
 │
 ├── DATA/
 │   └── RAW/
-│       └── tomato_karnataka_2025.csv
+│       └── (Raw dataset stored in Google BigQuery)
 │
 ├── DOCS/
 │   ├── Project_Report.md

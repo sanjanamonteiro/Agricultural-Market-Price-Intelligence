@@ -2,15 +2,30 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from google.cloud import bigquery
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-# Load dataset
-df = pd.read_csv("DATA/RAW/tomato_karnataka_2025.csv")
+# Retrieve the raw dataset directly from BigQuery
+PROJECT_ID = "agrimarketanalytics"
+TABLE_ID = "agrimarketanalytics.mandi_price_data.tomato_karnataka_2025"
 
-df["Arrival_Date"] = pd.to_datetime(
-    df["Arrival_Date"], dayfirst=True
-)
+client = bigquery.Client(project=PROJECT_ID)
+
+query = f"""
+    SELECT *
+    FROM `{TABLE_ID}`
+"""
+
+df = client.query(query).result().to_dataframe(create_bqstorage_client=False)
+
+print("Records retrieved from BigQuery:", len(df))
+
+if df.empty:
+    raise ValueError("BigQuery returned no records.")
+
+# Prepare dataset
+df["Arrival_Date"] = pd.to_datetime(df["Arrival_Date"])
 df["Modal_Price"] = pd.to_numeric(
     df["Modal_Price"], errors="coerce"
 )
@@ -18,6 +33,9 @@ df["Modal_Price"] = pd.to_numeric(
 # Select Ramanagara market
 df = df[df["Market"] == "Ramanagara"].copy()
 df = df.dropna(subset=["Arrival_Date", "Modal_Price"])
+
+if df.empty:
+    raise ValueError("No valid Ramanagara records found in BigQuery.")
 
 # Calculate daily average prices
 daily = (
@@ -53,6 +71,9 @@ features = [
 
 X = data[features]
 y = data["Price"]
+
+if len(data) < 10:
+    raise ValueError("Insufficient records for model training.")
 
 # Split data chronologically
 split = int(len(data) * 0.8)
@@ -134,3 +155,5 @@ print("\n===== NEXT 7 DAYS FORECAST =====")
 print(forecast_df.to_string(index=False))
 
 print("\nForecast files saved successfully!")
+
+client.close()
