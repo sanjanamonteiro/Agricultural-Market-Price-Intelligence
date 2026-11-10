@@ -406,3 +406,406 @@ FROM `agrimarketanalytics.mandi_price_data.tomato_karnataka_2025`
 WHERE Modal_Price >= 3000
 ORDER BY Modal_Price DESC;
 
+## 15. MongoDB Query Documentation
+
+MongoDB Atlas was used as the NoSQL database to store the curated agricultural market price records retrieved from BigQuery.
+
+**Database:** `agri_market_intelligence`  
+**Collection:** `ramanagara_tomato_prices`  
+**Total records:** 160  
+**Index:** `Arrival_Date_1` (ascending)
+
+### Query 1: Indexed Date-Range Search
+
+**Business Question:** How many tomato price records are available for January 2025?
+
+**Query:**
+```python
+query1 = {
+    "Arrival_Date": {
+        "$gte": "2025-01-01",
+        "$lt": "2025-02-01"
+    }
+}
+
+january_records = list(
+    collection.find(query1, {"_id": 0})
+    .hint("Arrival_Date_1")
+    .limit(5)
+)
+
+print("January record count:", collection.count_documents(query1))
+```
+
+**Sample Output:**
+- January records: 29
+- Sample records retrieved: 5
+- Index keys examined: 29
+- Documents examined: 29
+
+**Execution Time:** Not separately recorded.
+
+### Query 2: Overall Price Statistics
+
+**Business Question:** What are the average, minimum and maximum modal prices in the curated dataset?
+
+**Query:**
+```python
+result2 = list(collection.aggregate([
+    {
+        "$group": {
+            "_id": None,
+            "average_price": {"$avg": "$Modal_Price"},
+            "minimum_price": {"$min": "$Modal_Price"},
+            "maximum_price": {"$max": "$Modal_Price"},
+            "total_records": {"$sum": 1}
+        }
+    }
+]))
+
+print(result2)
+```
+
+**Sample Output:**
+
+| Metric | Result |
+|---|---:|
+| Average modal price | ₹1,210.625 |
+| Minimum price | ₹500 |
+| Maximum price | ₹2,600 |
+| Total records | 160 |
+
+**Execution Time:** Not separately recorded.
+
+### Query 3: Grade-Wise Price Analysis
+
+**Business Question:** What is the average modal price and record count for each grade?
+
+**Query:**
+```python
+result3 = list(collection.aggregate([
+    {
+        "$group": {
+            "_id": "$Grade",
+            "average_price": {"$avg": "$Modal_Price"},
+            "record_count": {"$sum": 1}
+        }
+    },
+    {
+        "$sort": {"average_price": -1}
+    }
+]))
+
+for record in result3:
+    print(record)
+```
+
+**Sample Output:**
+
+| Grade | Average Price | Records |
+|---|---:|---:|
+| FAQ | ₹1,210.625 | 160 |
+
+**Execution Time:** Not separately recorded.
+
+### Query 4: High-Price Record Identification
+
+**Business Question:** Which tomato price records have a modal price greater than ₹2,000?
+
+**Query:**
+```python
+query4 = {
+    "Modal_Price": {"$gt": 2000}
+}
+
+high_price_records = list(
+    collection.find(
+        query4,
+        {"_id": 0, "Arrival_Date": 1, "Market": 1,
+         "Modal_Price": 1}
+    ).sort("Modal_Price", -1).limit(10)
+)
+
+print("High-price record count:",
+      collection.count_documents(query4))
+
+for record in high_price_records:
+    print(record)
+```
+
+**Sample Output:**
+- High-price records: 6
+- Highest modal price: ₹2,600
+- Highest-price record date: 02-07-2025
+- Other identified prices: ₹2,500 and ₹2,400
+
+**Execution Time:** Not separately recorded.
+
+### Query 5: Monthly Average Price Analysis
+
+**Business Question:** How do average, minimum and maximum modal prices change month by month?
+
+**Query:**
+```python
+result5 = list(collection.aggregate([
+    {
+        "$group": {
+            "_id": {
+                "$substrBytes": ["$Arrival_Date", 0, 7]
+            },
+            "average_price": {"$avg": "$Modal_Price"},
+            "minimum_price": {"$min": "$Modal_Price"},
+            "maximum_price": {"$max": "$Modal_Price"},
+            "record_count": {"$sum": 1}
+        }
+    },
+    {
+        "$sort": {"_id": 1}
+    }
+]))
+
+for record in result5:
+    print(record)
+```
+
+**Sample Output:**
+
+| Month | Average Price | Records |
+|---|---:|---:|
+| January 2025 | ₹1,222.41 | 29 |
+| February 2025 | ₹1,197.50 | 20 |
+| March 2025 | ₹632.61 | 23 |
+| April 2025 | ₹1,029.63 | 27 |
+| May 2025 | ₹1,178.33 | 30 |
+| June 2025 | ₹1,779.31 | 29 |
+| July 2025 | ₹2,500.00 | 2 |
+
+**Execution Time:** Not separately recorded.
+
+### MongoDB Query Summary
+
+All five MongoDB queries were executed successfully on the 160-record curated collection. The queries demonstrate date-range filtering, aggregation, grouping, sorting, high-price identification and monthly price analysis.
+
+The individual execution times were not separately recorded. The indexed query's performance comparison is documented in Section 17.
+
+## 16. Real-Time Streaming Query Documentation
+
+Apache Kafka and PySpark Structured Streaming were used to process agricultural market price records continuously.
+
+**Kafka Topic:** `mandi-prices`  
+**Kafka Server:** `localhost:9092` (configured in the Spark script)  
+**Processing Trigger:** 10 seconds  
+**Window Duration:** 1 minute  
+**Watermark:** 2 minutes  
+**High-Price Alert Threshold:** ₹2,000
+
+### Query 1: Continuous Raw Record Processing
+
+**Business Question:** Can incoming agricultural market price records be continuously received, parsed and displayed?
+
+**Query:**
+```python
+raw_query = (
+    parsed_stream.writeStream
+    .queryName("MandiRawRecords")
+    .format("console")
+    .outputMode("append")
+    .option("truncate", "false")
+    .option("numRows", "10")
+    .option("checkpointLocation", CHECKPOINT_ROOT + "/raw")
+    .trigger(processingTime="10 seconds")
+    .start()
+)
+```
+
+**Sample Output:** Incoming mandi-price records were successfully processed and displayed in the Spark console with their structured fields.
+
+**Execution Time:** Not separately recorded.
+
+### Query 2: One-Minute Market-Wise Price Aggregation
+
+**Business Question:** What is the average modal price and number of records received for each market within a one-minute window?
+
+**Query:**
+```python
+windowed_prices = (
+    parsed_stream
+    .withWatermark("event_time", "2 minutes")
+    .groupBy(
+        window(col("event_time"), "1 minute"),
+        col("Market")
+    )
+    .agg(
+        avg("Modal_Price").alias("Average_Modal_Price"),
+        count("*").alias("Record_Count")
+    )
+)
+
+window_query = (
+    windowed_prices.writeStream
+    .queryName("MarketPriceAggregation")
+    .format("console")
+    .outputMode("update")
+    .option("truncate", "false")
+    .option("checkpointLocation", CHECKPOINT_ROOT + "/windowed")
+    .trigger(processingTime="10 seconds")
+    .start()
+)
+```
+
+**Sample Output:**
+
+| Field | Result |
+|---|---|
+| Market | Ramanagara |
+| Average modal price | ₹3,000 |
+| Record count | 1 |
+| Window duration | 1 minute |
+
+A test event with a modal price of ₹3,000 was successfully included in the one-minute aggregation.
+
+**Execution Time:** Not separately recorded.
+
+### Query 3: High-Price Alert Detection
+
+**Business Question:** Can the system identify incoming tomato price records with a modal price greater than ₹2,000?
+
+**Query:**
+```python
+price_alerts = (
+    parsed_stream
+    .filter(col("Modal_Price") > PRICE_ALERT_THRESHOLD)
+    .select(
+        "Arrival_Date",
+        "Market",
+        "Commodity",
+        "Modal_Price",
+        "District"
+    )
+)
+
+alert_query = (
+    price_alerts.writeStream
+    .queryName("HighPriceAlerts")
+    .format("console")
+    .outputMode("append")
+    .option("truncate", "false")
+    .option("checkpointLocation", CHECKPOINT_ROOT + "/alerts")
+    .trigger(processingTime="10 seconds")
+    .start()
+)
+```
+
+**Sample Output:**
+- Test modal price: ₹3,000
+- Alert threshold: ₹2,000
+- Result: High-price record successfully detected and displayed.
+
+**Execution Time:** Not separately recorded.
+
+### Streaming Implementation Summary
+
+All three Structured Streaming queries were started successfully. Separate checkpoint directories were configured for raw records, windowed aggregation and high-price alerts.
+
+A test event containing a tomato modal price of ₹3,000 was successfully processed. The system produced the raw record output, one-minute market aggregation and high-price alert.
+
+Screenshots of Kafka records, topic verification and Spark streaming outputs are included in the project documentation.
+
+## 17. Query Optimization and Performance Analysis
+
+The project used partitioning, clustering and indexing to improve data organization and query efficiency.
+
+### 17.1 BigQuery Optimization
+
+The curated BigQuery table `ramanagara_tomato_curated` was optimized using:
+
+- **Partitioning:** The table was partitioned by `Arrival_Date` to organize records by date.
+- **Clustering:** The table was clustered by `Grade` to organize records with similar grade values.
+
+These techniques support more efficient filtering and data retrieval for date-based and grade-based analytical queries.
+
+### 17.2 MongoDB Indexing
+
+An ascending index was created on the `Arrival_Date` field in the MongoDB collection.
+
+**Index:** `Arrival_Date_1`
+
+The index was tested using the January 2025 date-range query.
+
+### 17.3 Performance Comparison
+
+| Performance Metric | Indexed Search | Collection Scan |
+|---|---:|---:|
+| Execution time | 169.0366 ms | 129.6801 ms |
+| Keys examined | 29 | 0 |
+| Documents examined | 29 | 160 |
+
+**Analysis:**
+
+- Indexed search examined only 29 documents instead of 160.
+- This represents an approximately 81.9% reduction in documents examined.
+- However, the indexed search took longer in this particular test.
+- The collection scan was faster because the dataset contained only 160 records.
+
+Therefore, the index reduced the number of documents examined, but a reduction in execution time was not observed in this small dataset.
+
+### 17.4 Optimization Outcome
+
+BigQuery partitioning and clustering improved the organization of the curated analytical dataset. MongoDB indexing demonstrated how indexes can reduce the number of documents examined during date-range searches.
+
+The performance results also show that indexing benefits depend on dataset size, query patterns and database execution conditions.
+
+
+## 18. Challenges and Learnings
+
+### 18.1 Challenges Faced
+
+1. **Data Quality:** The original agricultural dataset required cleaning and validation to maintain consistent data formats and reliable price values.
+2. **Cloud Data Integration:** Connecting BigQuery with Python and transferring curated records to MongoDB required configuring the appropriate credentials and database connection.
+3. **ETL Automation:** Automating the transfer process required configuring and testing Windows Task Scheduler.
+4. **Kafka Integration:** Establishing communication between Kafka and Spark Structured Streaming required configuring the broker connection and streaming dependencies.
+5. **Streaming Processing:** Separate checkpoint locations were required for the raw records, windowed aggregation and high-price alert queries.
+6. **Machine Learning:** Forecasting performance was evaluated using MAE and RMSE to understand prediction errors.
+
+### 18.2 Learnings
+
+Through this project, the team gained practical experience in:
+
+- Working with public agricultural market datasets.
+- Cleaning and preprocessing data using Python.
+- Storing raw and curated datasets in Google BigQuery.
+- Performing analytical operations using SQL.
+- Integrating a cloud data warehouse with MongoDB Atlas.
+- Automating ETL using Python and Windows Task Scheduler.
+- Implementing Kafka-based data ingestion.
+- Processing streaming data using PySpark Structured Streaming.
+- Performing time-series forecasting using machine learning.
+- Building an interactive analytics dashboard using Streamlit.
+- Applying partitioning, clustering and indexing techniques.
+
+### 18.3 Overall Learning Outcome
+
+The project provided practical exposure to the major stages of a Big Data pipeline, from data ingestion and preprocessing to cloud storage, NoSQL integration, automated ETL, real-time streaming, analytics and visualization.
+
+## 19. Overall Project Outcome
+
+The project, titled **“Agricultural Market Price Intelligence and Short-Term Crop Price Forecasting Using Big Data Analytics,”** successfully demonstrates an end-to-end Big Data analytics pipeline using agricultural market price data.
+
+The system integrates public agricultural data, Python-based preprocessing, Google BigQuery cloud warehousing, MongoDB Atlas NoSQL storage, automated ETL, Apache Kafka, PySpark Structured Streaming, machine learning forecasting and Streamlit visualization.
+
+The major outcomes are:
+
+1. Processed 673 Karnataka tomato market-price records covering 9 markets during 2025.
+2. Stored and analyzed agricultural price data in Google BigQuery.
+3. Created a curated dataset of 160 Ramanagara FAQ-grade records.
+4. Transferred curated records from BigQuery to MongoDB Atlas.
+5. Implemented and tested automated ETL using Windows Task Scheduler.
+6. Executed 8 analytical SQL queries and 5 MongoDB queries.
+7. Implemented 3 real-time streaming queries using Kafka and PySpark.
+8. Successfully tested a high-price alert using a ₹3,000 modal-price event.
+9. Developed a machine learning forecasting model with an MAE of ₹413.69 and RMSE of ₹462.72.
+10. Developed an interactive Streamlit dashboard for agricultural market-price analysis.
+
+The project demonstrates how Big Data technologies can be combined to support agricultural price monitoring, analytical reporting, high-price event detection and short-term price forecasting.
+
+Overall, the implementation provides a practical example of an integrated cloud-based agricultural market intelligence system.
