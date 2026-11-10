@@ -158,7 +158,7 @@ The architecture combines historical data processing and simulated real-time str
 4. A curated Ramanagara dataset is created using BigQuery.
 5. Curated records are transferred from BigQuery to MongoDB Atlas.
 6. Python and Windows Task Scheduler automate the ETL process.
-7. Historical CSV records are replayed through a Kafka producer.
+7. Historical market-price records retrieved from Google BigQuery are replayed through a Kafka producer.
 8. Apache Kafka receives the records through the `mandi-prices` topic.
 9. Spark Structured Streaming processes the incoming events.
 10. Streaming output includes raw records, one-minute aggregations, and high-price alerts.
@@ -568,7 +568,7 @@ The timings represent the measured operations in the Python query script. For Qu
 
 ## 11.1 Purpose
 
-Apache Kafka is used to receive agricultural market-price records as messages. The Python producer reads records from the historical CSV file and sends them to a Kafka topic.
+Apache Kafka is used to receive agricultural market-price records as messages. The Python producer retrieves records directly from Google BigQuery and sends them to a Kafka topic.
 
 This simulates an incoming market-price data feed.
 
@@ -579,14 +579,15 @@ This simulates an incoming market-price data feed.
 | Kafka topic | `mandi-prices` |
 | Configured broker | `localhost:9092` |
 | Producer file | `STREAMING/kafka_price_producer.py` |
-| Primary data source | Google BigQuery: `agrimarketanalytics.mandi_price_data.tomato_karnataka_2025` || Message format | JSON |
+| Primary data source | Google BigQuery: `agrimarketanalytics.mandi_price_data.tomato_karnataka_2025` |
+| Message format | JSON |
 | Replay delay | 1 second |
 
 ## 11.3 Producer operation
 
 The Kafka producer:
 
-1. Reads the CSV dataset.
+1. Retrieves the dataset directly from Google BigQuery.
 2. Retrieves each row as a dictionary.
 3. Prepares the record for JSON serialization.
 4. Uses the market name as the Kafka message key.
@@ -1261,40 +1262,40 @@ Important project files include:
 
 ```text
 Agricultural_Market_Price_Intelligence/
-│
-├── DASHBOARD/
-│   └── app_corrected.py
-│
-├── DATA/
-│   └── RAW/
-│       └── (Raw dataset stored in Google BigQuery)
-│
-├── DOCS/
-│   ├── Project_Report.md
-│   ├── architecture_diagram.md
-│   └── Screenshots/
-│
-├── FORECASTING/
-│   ├── price_forecasting.py
-│   ├── model_evaluation.csv
-│   └── next_7_days_forecast.csv
-│
-├── MONGODB/
-│   ├── index_performance.py
-│   ├── mongodb_queries.py
-│   └── mongodb_results.txt
-│
-├── SCRIPTS/
-│   └── bigquery_queries.sql
-│
-├── STREAMING/
-│   ├── kafka_price_producer.py
-│   └── spark_kafka_stream.py
-│
-├── requirements.txt
-├── run_etl.bat
-├── transfer_bigquery_to_mongodb.py
-└── .gitignore
+|
+|-- DASHBOARD/
+|   `-- app_corrected.py
+|
+|-- DATA/
+|   `-- RAW/
+|       `-- (Raw dataset stored in Google BigQuery)
+|
+|-- DOCS/
+|   |-- Project_Report.md
+|   |-- architecture_diagram.md
+|   `-- Screenshots/
+|
+|-- FORECASTING/
+|   |-- price_forecasting.py
+|   |-- model_evaluation.csv
+|   `-- next_7_days_forecast.csv
+|
+|-- MONGODB/
+|   |-- index_performance.py
+|   |-- mongodb_queries.py
+|   `-- mongodb_results.txt
+|
+|-- SCRIPTS/
+|   `-- bigquery_queries.sql
+|
+|-- STREAMING/
+|   |-- kafka_price_producer.py
+|   `-- spark_kafka_stream.py
+|
+|-- requirements.txt
+|-- run_etl.bat
+|-- transfer_bigquery_to_mongodb.py
+`-- .gitignore
 ```
 
 Private credentials, environment files, virtual environments, and generated checkpoint files are excluded from version control.
