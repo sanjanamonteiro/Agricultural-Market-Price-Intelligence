@@ -56,8 +56,8 @@ data["Lag_7"] = data["Price"].shift(7)
 data["Rolling_Mean_7"] = (
     data["Price"].shift(1).rolling(7).mean()
 )
-data["Day_Of_Week"] = data.index.dayofweek
-data["Day_Of_Year"] = data.index.dayofyear
+data["Day_Of_Week"] = data.index.day_of_week
+data["Day_Of_Year"] = data.index.day_of_year
 
 data = data.dropna()
 
@@ -131,8 +131,8 @@ for _ in range(7):
         "Lag_1": history.iloc[-1],
         "Lag_7": history.iloc[-7],
         "Rolling_Mean_7": history.iloc[-7:].mean(),
-        "Day_Of_Week": next_date.dayofweek,
-        "Day_Of_Year": next_date.dayofyear
+        "Day_Of_Week": next_date.day_of_week,
+        "Day_Of_Year": next_date.day_of_year
     }])
 
     predicted_price = model.predict(row[features])[0]
