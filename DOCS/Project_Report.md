@@ -110,6 +110,100 @@ The project uses the 673-record Karnataka tomato dataset for the overall BigQuer
 
 The 160-record collection must not be confused with the full 673-record dataset. They represent different scopes of analysis.
 
+## 4.5 Preprocessing
+
+Preprocessing is performed at two stages: the BigQuery-to-MongoDB ETL prepares the 160-record Ramanagara FAQ-grade collection, while the forecasting pipeline prepares the 673-record BigQuery dataset for time-series modelling.
+
+### 4.5.1 Data Cleaning and Schema Validation
+
+The ETL script `transfer_bigquery_to_mongodb.py` retrieves curated records from BigQuery and validates the required fields before loading them into MongoDB.
+
+The preprocessing operations include:
+
+- Trimming leading and trailing whitespace from text values.
+- Converting empty strings into missing values.
+- Checking required fields, including `Arrival_Date`, `Commodity`, `District`, `Grade`, `Market`, `Min_Price`, `Modal_Price`, `Max_Price`, `State`, and `Variety`.
+- Converting BigQuery date values into ISO-formatted strings.
+- Converting decimal numeric values into MongoDB-compatible numeric values.
+- Rejecting records with missing required values, invalid dates, invalid text values, non-numeric or non-finite prices, and negative prices.
+- Validating the price relationship: `Min_Price <= Modal_Price <= Max_Price`.
+
+No arbitrary upper-price limit is applied, since a high market price may represent a genuine price variation.
+
+### 4.5.2 Deduplication and Data Integrity
+
+The ETL identifies and removes exact duplicate records before transferring data.
+
+A composite business key is used to distinguish individual market-price records. It consists of:
+
+`Arrival_Date`, `Commodity`, `State`, `District`, `Market`, `Grade`, and `Variety`.
+
+A unique MongoDB compound index named `market_price_business_key` enforces this key. The earlier unique index on `Arrival_Date` alone was replaced because multiple legitimate market records can exist on the same date.
+
+The ETL uses MongoDB upsert operations and compares existing records with incoming records to avoid unnecessary updates. This makes repeated executions idempotent when the source data remains unchanged.
+
+**Execution evidence:**
+
+- Source records fetched: 160
+- Exact duplicates removed: 0
+- Invalid records rejected: 0
+- Valid unique records: 160
+- Final MongoDB collection count: 160
+
+During the second execution, zero records were inserted, zero were updated, and all 160 records remained unchanged. The composite unique index was also verified successfully.
+
+### 4.5.3 Missing and Noisy Value Handling in Forecasting
+
+In `FORECASTING/price_forecasting.py`, the historical dataset is retrieved directly from BigQuery and filtered for the Ramanagara market.
+
+Arrival dates are converted into datetime format, and modal prices are converted into numeric values. Records with missing dates or modal prices are removed.
+
+The remaining records are grouped by arrival date to calculate daily average modal prices. The daily series is resampled to calendar-day frequency, and missing dates are handled through time-based interpolation to create a continuous daily series for forecasting.
+
+### 4.5.4 Feature Engineering
+
+The forecasting pipeline creates the following features from the daily modal-price series:
+
+| Feature | Description |
+|---|---|
+| `Lag_1` | Previous day's modal price |
+| `Lag_7` | Modal price seven days earlier |
+| `Rolling_Mean_7` | Average modal price over the previous seven days |
+| `Day_Of_Week` | Numerical representation of the day of the week |
+| `Day_Of_Year` | Numerical representation of the day within the year |
+
+The rolling mean is calculated after shifting the price series by one day. This excludes the current day's target price from the rolling calculation.
+
+Rows without sufficient historical values for the lag and rolling features are removed before model training.
+
+### 4.5.5 Forecasting Preparation and Evaluation
+
+The prepared dataset is divided chronologically into 80% training data and 20% testing data. A Random Forest Regressor is trained using the engineered features.
+
+The verified execution produced the following results:
+
+| Evaluation metric | Result |
+|---|---:|
+| Training records | 240 |
+| Testing records | 61 |
+| Mean Absolute Error (MAE) | ₹413.69 |
+| Root Mean Squared Error (RMSE) | ₹462.72 |
+
+The model generates two output files:
+
+- `FORECASTING/model_evaluation.csv`
+- `FORECASTING/next_7_days_forecast.csv`
+
+The latest historical observation used in this execution was dated 4 November 2025. Therefore, the generated seven-day forecast covers 5–11 November 2025. These forecast dates are relative to the available historical dataset, not the current calendar date.
+
+**Evaluation limitation:** Time-based interpolation is currently performed before the chronological train-test split. Interpolation can use observations on both sides of a missing date. Therefore, the evaluation metrics should be treated as an experimental baseline; a stricter evaluation would restrict missing-value treatment to information available in the training period.
+
+### 4.5.6 Preprocessing Outcome
+
+The preprocessing stage cleans and validates market-price records, removes exact duplicates, handles missing and invalid values, maintains MongoDB record uniqueness, converts data into compatible formats, and generates historical and calendar-based features for forecasting.
+
+Successful ETL execution, the idempotency test, MongoDB index verification, and forecasting execution provide evidence that the preprocessing pipeline is implemented and operational.
+
 # 5. BIG DATA CHARACTERISTICS
 
 The project demonstrates the three major Big Data characteristics: Volume, Velocity, and Variety.
