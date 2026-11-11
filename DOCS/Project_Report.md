@@ -204,6 +204,114 @@ The preprocessing stage cleans and validates market-price records, removes exact
 
 Successful ETL execution, the idempotency test, MongoDB index verification, and forecasting execution provide evidence that the preprocessing pipeline is implemented and operational.
 
+
+4.6 Real-Time Streaming Analytics
+The project implements a streaming analytics pipeline using Apache Kafka and Apache Spark Structured Streaming. The pipeline processes agricultural market-price records retrieved from Google BigQuery and demonstrates continuous data ingestion, real-time aggregation, and high-price alert generation.
+4.6.1 Streaming Architecture
+The streaming pipeline consists of the following components:
+1. Google BigQuery: Supplies the 673 Karnataka tomato market-price records from the tomato_karnataka_2025 table.
+2. Kafka Producer: The Python script STREAMING/kafka_price_producer.py retrieves records from BigQuery, converts them into JSON format, and publishes them to Kafka.
+3. Apache Kafka: Receives the records through the mandi-prices topic. Each record is assigned a market-based key.
+4. Spark Structured Streaming: The script STREAMING/spark_kafka_stream.py consumes Kafka messages, parses the JSON records, converts price fields into numerical values, and performs streaming analytics.
+5. Console Output: Displays processed records, market-level aggregations, and high-price alerts.
+The producer introduces a one-second delay between records to simulate a continuous incoming data stream.
+4.6.2 Kafka Data Ingestion
+The Kafka producer connects to the BigQuery table and retrieves records ordered by arrival date and market.
+
+Each record is serialized into JSON and published to the Kafka topic mandi-prices. The producer uses the market name as the message key and waits for broker acknowledgement before proceeding to the next record.
+
+This approach demonstrates the transfer of structured agricultural market-price data from a cloud data warehouse into a distributed messaging system.
+
+Configuration details:
+Parameter	Configuration
+Data source	Google BigQuery
+Source table	tomato_karnataka_2025
+Kafka broker	localhost:9092
+Kafka topic	mandi-prices
+Message format	JSON
+Record publishing delay	1 second
+
+4.6.3 Spark Structured Streaming Configuration
+Apache Spark Structured Streaming is used to consume and process incoming Kafka messages.
+
+The streaming application uses the following configurations:
+Parameter	Configuration
+Application name	AgriMarketPriceIntelligence
+Processing mode	local[2]
+Shuffle partitions	4
+Maximum offsets per trigger	100
+Processing interval	10 seconds
+Starting Kafka offsets	Earliest
+Watermark	2 minutes
+Checkpointing	Enabled for all three queries
+
+The incoming JSON messages are parsed using a predefined schema containing the 11 dataset attributes. The arrival date and price fields are converted into appropriate data types. Records with missing modal prices or market names are excluded from further processing.
+4.6.4 Continuous Streaming Queries
+The application implements three independent streaming queries.
+
+Query 1: Raw Market-Price Record Processing
+- Query name: MandiRawRecords
+- Output format: Console
+- Output mode: Append
+- Displays structured agricultural market-price records received from Kafka.
+- Displays up to 10 records per output batch.
+This query verifies that the streaming application successfully receives and parses incoming market-price records.
+
+Query 2: Windowed Market-Price Aggregation
+- Query name: MarketPriceAggregation
+- Window duration: 1 minute
+- Grouping: Market
+- Output mode: Update
+- Watermark: 2 minutes
+The query groups incoming records into one-minute event-time windows for each market and calculates:
+- Average modal price.
+- Total number of records.
+The aggregation helps monitor short-term price behaviour across different agricultural markets.
+
+Query 3: High-Price Alert Detection
+- Query name: HighPriceAlerts
+- Alert threshold: ₹2,000
+- Output format: Console
+- Output mode: Append
+The query filters incoming records where the modal price exceeds ₹2,000 and displays the arrival date, market, commodity, modal price, and district.
+
+This provides a simple rule-based mechanism for identifying unusually high market-price observations.
+4.6.5 Streaming Performance Monitoring
+A custom Spark Streaming Query Listener is implemented to capture actual micro-batch execution information.
+
+The listener records:
+- Query name.
+- Batch ID.
+- Number of input records.
+- Actual trigger execution time in milliseconds.
+- Input records per second.
+- Processed records per second.
+This information helps monitor the execution and processing behaviour of the streaming application.
+
+Checkpoint locations are maintained separately for the raw-record, windowed-aggregation, and alert queries to support streaming progress and state management.
+4.6.6 Streaming Execution Results
+The streaming pipeline was tested by publishing the 673 historical market-price records from BigQuery to Kafka with a one-second delay.
+
+The verified execution demonstrated the following:
+Execution parameter	Result
+Records published to Kafka	673
+Records processed by each streaming query	673
+Maximum records per micro-batch	100
+Micro-batches observed	7
+Records in final batch	73
+Streaming queries implemented	3
+High-price alert threshold	₹2,000
+
+The streaming application successfully demonstrated raw-record processing, one-minute market-level aggregation, and high-price alert detection.
+
+Implementation note: The source data consists of historical AGMARKNET records from 2025. These records are replayed through Kafka to simulate continuous data arrival. Therefore, the implementation demonstrates streaming processing using historical data rather than a direct live connection to AGMARKNET.
+4.6.7 Streaming Analytics Outcome
+The streaming layer demonstrates the integration of Google BigQuery, Apache Kafka, and Apache Spark Structured Streaming for agricultural market-price analytics.
+
+It supports continuous message ingestion, event-time windowed aggregation, rule-based high-price detection, checkpointing, and micro-batch performance monitoring. Console output provides the visible results of the streaming queries.
+
+The implementation establishes a foundation for extending the system with live agricultural data sources, graphical monitoring dashboards, and more advanced anomaly-detection models.
+
 # 5. BIG DATA CHARACTERISTICS
 
 The project demonstrates the three major Big Data characteristics: Volume, Velocity, and Variety.
